@@ -6,7 +6,7 @@ all: $(OUTPUT_DIR)/libs $(if $(ANDROID),,$(LUAJIT)) \
 		$(LUAJIT_JIT) \
 		libs $(K2PDFOPT_LIB) \
 		$(OUTPUT_DIR)/spec/base $(OUTPUT_DIR)/common \
-		$(OUTPUT_DIR)/plugins $(LUASOCKET) \
+		$(OUTPUT_DIR)/plugins $(LUASOCKET) $(LJ_WPACLIENT) \
 		$(if $(WIN32),,$(LUASEC)) \
 		$(if $(ANDROID),luacompat52 lualongnumber,) \
 		$(if $(WIN32),,$(EVERNOTE_LIB)) \
@@ -218,6 +218,16 @@ $(K2PDFOPT_LIB) $(LEPTONICA_LIB) $(TESSERACT_LIB): $(PNG_LIB) $(ZLIB) $(MUPDF_LI
 	cp -fL $(K2PDFOPT_DIR)/$(notdir $(K2PDFOPT_LIB)) $(K2PDFOPT_LIB)
 	cp -fL $(K2PDFOPT_DIR)/$(notdir $(LEPTONICA_LIB)) $(LEPTONICA_LIB)
 	cp -fL $(K2PDFOPT_DIR)/$(notdir $(TESSERACT_LIB)) $(TESSERACT_LIB)
+
+$(LJ_WPACLIENT): $(OUTPUT_DIR)/common
+	-test ! -d $(LJ_WPACLIENT_DIR) && mkdir $(LJ_WPACLIENT_DIR)
+	for f in $(LJ_WPACLIENT_FILES); do \
+		ln -sf ../../../../lj-wpaclient/$$f $(LJ_WPACLIENT_DIR) ; \
+	done
+	# create dummy poll header file to avoid redefining C symbols. because
+	# poll header has already been defined in posix_h.lua
+	touch $(LJ_WPACLIENT_DIR)/poll_h.lua
+
 
 # end of third-party code
 # ===========================================================================
