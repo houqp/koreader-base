@@ -1,67 +1,84 @@
-diff --git a/source/pdf/pdf-font.c b/source/pdf/pdf-font.c
-index 35e61f9..8c5ad86 100644
---- a/source/pdf/pdf-font.c
-+++ b/source/pdf/pdf-font.c
-@@ -188,7 +188,12 @@ pdf_load_builtin_font(fz_context *ctx, pdf_font_desc *fontdesc, char *fontname,
- 		if (!data)
- 			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot find builtin font: '%s'", fontname);
-
+diff --git a/source/fitz/font.c b/source/fitz/font.c
+index cd5c764..d3f61cc 100644
+--- a/source/fitz/font.c
++++ b/source/fitz/font.c
+@@ -307,7 +307,12 @@ fz_font *fz_load_fallback_font(fz_context *ctx, int script, int serif, int bold,
+ 		data = fz_lookup_noto_font(ctx, script, 1, &size);
+ 		if (data)
+ 		{
 +#ifndef NOBUILTINFONT
- 		fontdesc->font = fz_new_font_from_memory(ctx, fontname, data, len, 0, 1);
+ 			ctx->font->fallback[script].serif = fz_new_font_from_memory(ctx, NULL, data, size, 0, 0);
 +#else
-+		fontdesc->font = fz_new_font_from_file(ctx, fontname, data, 0, 1);
-+		free(data);
++			ctx->font->fallback[script].serif = fz_new_font_from_file(ctx, NULL, data, 0, 0);
++			free((char*)data);
 +#endif
+ 			return ctx->font->fallback[script].serif;
+ 		}
+ 	}
+@@ -317,7 +322,12 @@ fz_font *fz_load_fallback_font(fz_context *ctx, int script, int serif, int bold,
+ 	data = fz_lookup_noto_font(ctx, script, 0, &size);
+ 	if (data)
+ 	{
++#ifndef NOBUILTINFONT
+ 		ctx->font->fallback[script].sans = fz_new_font_from_memory(ctx, NULL, data, size, 0, 0);
++#else
++		ctx->font->fallback[script].sans = fz_new_font_from_file(ctx, NULL, data, 0, 0);
++		free((char*)data);
++#endif
+ 		return ctx->font->fallback[script].sans;
  	}
 
- 	if (!strcmp(clean_name, "Symbol") || !strcmp(clean_name, "ZapfDingbats"))
-@@ -212,7 +217,12 @@ pdf_load_substitute_font(fz_context *ctx, pdf_font_desc *fontdesc, char *fontnam
- 		if (!data)
- 			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot find substitute font");
-
+@@ -331,8 +341,15 @@ fz_font *fz_load_fallback_symbol_font(fz_context *ctx)
+ 	if (!ctx->font->symbol)
+ 	{
+ 		data = fz_lookup_noto_symbol_font(ctx, &size);
 +#ifndef NOBUILTINFONT
- 		fontdesc->font = fz_new_font_from_memory(ctx, fontname, data, len, 0, 1);
+ 		if (data)
+ 			ctx->font->symbol = fz_new_font_from_memory(ctx, NULL, data, size, 0, 0);
 +#else
-+		fontdesc->font = fz_new_font_from_file(ctx, fontname, data, 0, 1);
-+		free(data);
-+#endif
- 		fontdesc->font->ft_bold = bold && !ft_is_bold(fontdesc->font->ft_face);
- 		fontdesc->font->ft_italic = italic && !ft_is_italic(fontdesc->font->ft_face);
- 	}
-@@ -235,7 +245,12 @@ pdf_load_substitute_cjk_font(fz_context *ctx, pdf_font_desc *fontdesc, char *fon
- 			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot find builtin CJK font");
-
- 		/* A glyph bbox cache is too big for CJK fonts. */
-+#ifndef NOBUILTINFONT
- 		fontdesc->font = fz_new_font_from_memory(ctx, fontname, data, len, index, 0);
-+#else
-+		fontdesc->font = fz_new_font_from_file(ctx, fontname, data, 0, 1);
-+		free(data);
++		if (data) {
++			ctx->font->symbol = fz_new_font_from_file(ctx, NULL, data, 0, 0);
++			free((char*)data);
++		}
 +#endif
  	}
-
- 	fontdesc->font->ft_substitute = 1;
-diff --git a/source/pdf/pdf-fontfile.c b/source/pdf/pdf-fontfile.c
-index 86b6682..4e062de 100644
---- a/source/pdf/pdf-fontfile.c
-+++ b/source/pdf/pdf-fontfile.c
-@@ -11,6 +11,8 @@
- 	Set NOCJKFULL to embed a smaller CJK font without CJK Extension A support.
- */
-
-+#ifndef NOBUILTINFONT
-+
- #ifdef NOCJK
- #define NOCJKFONT
- #endif
-@@ -136,3 +138,116 @@ pdf_lookup_substitute_cjk_font(fz_context *ctx, int ros, int serif, int wmode, u
- 	return NULL;
- #endif
+ 	return ctx->font->symbol;
  }
-+
+@@ -344,8 +361,15 @@ fz_font *fz_load_fallback_emoji_font(fz_context *ctx)
+ 	if (!ctx->font->emoji)
+ 	{
+ 		data = fz_lookup_noto_emoji_font(ctx, &size);
++#ifndef NOBUILTINFONT
+ 		if (data)
+ 			ctx->font->emoji = fz_new_font_from_memory(ctx, NULL, data, size, 0, 0);
++#else
++		if (data) {
++			ctx->font->emoji = fz_new_font_from_file(ctx, NULL, data, 0, 0);
++			free((char*)data);
++		}
++#endif
+ 	}
+ 	return ctx->font->emoji;
+ }
+diff --git a/source/fitz/noto.c b/source/fitz/noto.c
+index 1ac6e6c..ea260fb 100644
+--- a/source/fitz/noto.c
++++ b/source/fitz/noto.c
+@@ -37,6 +37,7 @@
+ 	extern const char fz_font_ ## NAME []; \
+ 	return *size = fz_font_ ## NAME ## _size, fz_font_ ## NAME
+
++#ifndef NOBUILTINFONT
+ const char *
+ fz_lookup_base14_font(fz_context *ctx, const char *name, int *size)
+ {
+@@ -96,6 +97,119 @@ fz_lookup_builtin_font(fz_context *ctx, const char *name, int is_bold, int is_it
+ 	return *size = 0, NULL;
+ }
+
 +#else // NOBUILTINFONT
 +
-+unsigned char *
++const char *
 +get_font_file(char *name)
 +{
 +	char *fontdir;
@@ -80,18 +97,18 @@ index 86b6682..4e062de 100644
 +	return filename;
 +}
 +
-+unsigned char *
-+pdf_lookup_builtin_font(fz_context *ctx, const char *name, unsigned int *len)
++const char *
++fz_lookup_base14_font(fz_context *ctx, const char *name, int *size)
 +{
-+	*len = 0;
++	*size = 0;
 +	if (!strcmp("Courier", name)) {
 +		return get_font_file("urw/NimbusMono-Regular.cff");
 +	}
-+	if (!strcmp("Courier-Bold", name)) {
-+		return get_font_file("urw/NimbusMono-Bold.cff");
-+	}
 +	if (!strcmp("Courier-Oblique", name)) {
 +		return get_font_file("urw/NimbusMono-Oblique.cff");
++	}
++	if (!strcmp("Courier-Bold", name)) {
++		return get_font_file("urw/NimbusMono-Bold.cff");
 +	}
 +	if (!strcmp("Courier-BoldOblique", name)) {
 +		return get_font_file("urw/NimbusMono-BoldOblique.cff");
@@ -99,11 +116,11 @@ index 86b6682..4e062de 100644
 +	if (!strcmp("Helvetica", name)) {
 +		return get_font_file("urw/NimbusSanL-Reg.cff");
 +	}
-+	if (!strcmp("Helvetica-Bold", name)) {
-+		return get_font_file("urw/NimbusSanL-Bol.cff");
-+	}
 +	if (!strcmp("Helvetica-Oblique", name)) {
 +		return get_font_file("urw/NimbusSanL-RegIta.cff");
++	}
++	if (!strcmp("Helvetica-Bold", name)) {
++		return get_font_file("urw/NimbusSanL-Bol.cff");
 +	}
 +	if (!strcmp("Helvetica-BoldOblique", name)) {
 +		return get_font_file("urw/NimbusSanL-BolIta.cff");
@@ -111,11 +128,11 @@ index 86b6682..4e062de 100644
 +	if (!strcmp("Times-Roman", name)) {
 +		return get_font_file("urw/NimbusRomNo9L-Reg.cff");
 +	}
-+	if (!strcmp("Times-Bold", name)) {
-+		return get_font_file("urw/NimbusRomNo9L-Med.cff");
-+	}
 +	if (!strcmp("Times-Italic", name)) {
 +		return get_font_file("urw/NimbusRomNo9L-RegIta.cff");
++	}
++	if (!strcmp("Times-Bold", name)) {
++		return get_font_file("urw/NimbusRomNo9L-Med.cff");
 +	}
 +	if (!strcmp("Times-BoldItalic", name)) {
 +		return get_font_file("urw/NimbusRomNo9L-MedIta.cff");
@@ -129,344 +146,190 @@ index 86b6682..4e062de 100644
 +	return NULL;
 +}
 +
-+unsigned char *
-+pdf_lookup_substitute_font(fz_context *ctx, int mono, int serif, int bold, int italic, unsigned int *len)
-+{
-+	if (mono) {
-+		if (bold) {
-+			if (italic) return pdf_lookup_builtin_font(ctx, "Courier-BoldOblique", len);
-+			else return pdf_lookup_builtin_font(ctx, "Courier-Bold", len);
-+		} else {
-+			if (italic) return pdf_lookup_builtin_font(ctx, "Courier-Oblique", len);
-+			else return pdf_lookup_builtin_font(ctx, "Courier", len);
-+		}
-+	} else if (serif) {
-+		if (bold) {
-+			if (italic) return pdf_lookup_builtin_font(ctx, "Times-BoldItalic", len);
-+			else return pdf_lookup_builtin_font(ctx, "Times-Bold", len);
-+		} else {
-+			if (italic) return pdf_lookup_builtin_font(ctx, "Times-Italic", len);
-+			else return pdf_lookup_builtin_font(ctx, "Times-Roman", len);
-+		}
-+	} else {
-+		if (bold) {
-+			if (italic) return pdf_lookup_builtin_font(ctx, "Helvetica-BoldOblique", len);
-+			else return pdf_lookup_builtin_font(ctx, "Helvetica-Bold", len);
-+		} else {
-+			if (italic) return pdf_lookup_builtin_font(ctx, "Helvetica-Oblique", len);
-+			else return pdf_lookup_builtin_font(ctx, "Helvetica", len);
-+		}
++#define FAMILY(R, I, B, BI) \
++	if (!is_bold) { \
++		if (!is_italic) { return get_font_file(R); } else { return get_font_file(I); } \
++	} else { \
++		if (!is_italic) { return get_font_file(B); } else { return get_font_file(BI); } \
 +	}
-+}
 +
-+unsigned char *
-+pdf_lookup_substitute_cjk_font(fz_context *ctx, int ros, int serif, int wmode, unsigned int *len, int *index)
++const char *
++fz_lookup_builtin_font(fz_context *ctx, const char *name, int is_bold, int is_italic, int *size)
++{
++	*size = 0;
++	if (!strcmp(name, "Courier")) {
++		FAMILY("urw/NimbusMono-Regular.cff",
++				"urw/NimbusMono-Oblique.cff",
++				"urw/NimbusMono-Bold.cff",
++				"urw/NimbusMono-BoldOblique.cff")
++	}
++	if (!strcmp(name, "Helvetica") || !strcmp(name, "Arial")) {
++		FAMILY("urw/NimbusSanL-Reg.cff",
++				"urw/NimbusSanL-RegIta.cff",
++				"urw/NimbusSanL-Bol.cff",
++				"urw/NimbusSanL-BolIta.cff")
++	}
++	if (!strcmp(name, "Times") || !strcmp(name, "Times Roman") || !strcmp(name, "Times New Roman")) {
++		FAMILY("urw/NimbusRomNo9L-Reg.cff",
++				"urw/NimbusRomNo9L-RegIta.cff",
++				"urw/NimbusRomNo9L-Med.cff",
++				"urw/NimbusRomNo9L-MedIta.cff")
++	}
++#ifndef TOFU
++	if (!strcmp(name, "Noto Serif")) {
++		return get_font_file("noto/NotoSerif-Regular.ttf");
++	}
++	if (!strcmp(name, "Noto Sans")) {
++		return get_font_file("noto/NotoSans-Regular.ttf");
++	}
++#endif
++	return NULL;
++}
++#endif // EOF NOBUILTINFONT
++
++
++#ifndef NOBUILTINFONT
+ const char *
+ fz_lookup_cjk_font(fz_context *ctx, int registry, int serif, int wmode, int *size, int *index)
+ {
+@@ -112,12 +226,36 @@ fz_lookup_cjk_font(fz_context *ctx, int registry, int serif, int wmode, int *siz
+ #endif
+ }
+
++#else // NOBUILTINFONT
++
++const char *
++fz_lookup_cjk_font(fz_context *ctx, int registry, int serif, int wmode, int *len, int *index)
 +{
 +	*len = 0;
 +	return get_font_file("noto/NotoSansCJK-Regular.ttf");
 +}
++#endif // EOF NOBUILTINFONT
 +
-+void pdf_install_load_system_font_funcs(fz_context *ctx)
-+{
-+}
++#define NOBUILTINFONT
 +
-+#endif // NOBUILTINFONT
-diff --git a/include/mupdf/fitz/unzip.h b/include/mupdf/fitz/unzip.h
-index b19ffbd..e94970d 100644
---- a/include/mupdf/fitz/unzip.h
-+++ b/include/mupdf/fitz/unzip.h
-@@ -19,4 +19,7 @@ void fz_drop_archive(fz_context *ctx, fz_archive *ar);
- int fz_count_archive_entries(fz_context *ctx, fz_archive *zip);
- const char *fz_list_archive_entry(fz_context *ctx, fz_archive *zip, int idx);
- 
-+int fz_archive_needs_password(fz_context *ctx, fz_archive *zip);
-+int fz_archive_authenticate_password(fz_context *ctx, fz_archive *zip, const char *password);
++#ifndef NOBUILTINFONT
+ #define Noto(SANS) { RETURN(Noto ## SANS ## _Regular_ttf); } break
++#else // NOBUILTINFONT
++#define STRINGIZE(A) #A
++#define Noto(SANS) { *size = 0; return get_font_file(STRINGIZE(noto/Noto##SANS-Regular.ttf)); } break
++#endif // EOF NOBUILTINFONT
+
++#ifndef NOBUILTINFONT
+ #define Noto2(SANS,SERIF) \
+ 	if (serif) { RETURN(Noto ## SERIF ## _Regular_ttf); } \
+ 	else { RETURN(Noto ## SANS ## _Regular_ttf); } \
+ 	break
++#else // NOBUILTINFONT
++#define Noto2(SANS,SERIF) \
++	if (serif) { Noto(SERIF); } \
++	else { Noto(SANS); } \
++	break
++#endif // EOF NOBUILTINFONT
+
+ #define Noto3(SANS,SERIF,UNUSED) \
+ 	Noto2(SANS,SERIF)
+@@ -289,7 +427,13 @@ const char *
+ fz_lookup_noto_symbol_font(fz_context *ctx, int *size)
+ {
+ #ifndef TOFU_SYMBOL
 +
++#ifndef NOBUILTINFONT
+ 	RETURN(NotoSansSymbols_Regular_ttf);
++#else // NOBUILTINFONT
++	return get_font_file("noto/NotoSansSymbols-Regular.ttf");
++#endif
++
+ #else
+ 	return *size = 0, NULL;
  #endif
-diff --git a/source/fitz/unzip.c b/source/fitz/unzip.c
-index 23028d4..3915786 100644
---- a/source/fitz/unzip.c
-+++ b/source/fitz/unzip.c
-@@ -13,10 +13,32 @@
- 
- #define ZIP_ENCRYPTED_FLAG 0x1
- 
-+/*
-+ * Note that the crypt.h in minizip uses unsigned long pointer to pcrc_32_tab
-+ * it will cause problem on x86_64 machine. While the crypt.h in zlib-1.2.8
-+ * contrib minizip uses z_crc_t pointer which is determined to unsigned int
-+ * pointer on 64 bit machine.
-+ */
-+#include "contrib/minizip/crypt.h"  // from zlib-1.2.8
-+
-+#include "aes/fileenc.h"            // from minizip-g0b46a2b
-+
-+#define AES_METHOD          (99)
-+#define AES_PWVERIFYSIZE    (2)
-+#define AES_MAXSALTLENGTH   (16)
-+#define AES_AUTHCODESIZE    (10)
-+#define AES_HEADERSIZE      (11)
-+#define AES_KEYSIZE(mode)   (64 + (mode * 64))
-+
-+#define KEY_LENGTH(mode)        (8 * (mode & 3) + 8)
-+#define SALT_LENGTH(mode)       (4 * (mode & 3) + 4)
-+#define MAC_LENGTH(mode)        (10)
-+
- struct zip_entry
+@@ -299,7 +443,13 @@ const char *
+ fz_lookup_noto_emoji_font(fz_context *ctx, int *size)
  {
- 	char *name;
- 	int offset, csize, usize;
-+	int crypted;
- };
- 
- struct fz_archive_s
-@@ -25,6 +47,15 @@ struct fz_archive_s
- 	fz_stream *file;
- 	int count;
- 	struct zip_entry *table;
+ #ifndef TOFU_EMOJI
 +
-+	int crypted;
-+	char password[128];
-+	unsigned long keys[3];     /* keys defining the pseudo-random sequence */
-+	const z_crc_t *pcrc_32_tab;
-+	unsigned long aes_encryption_mode;
-+	unsigned long aes_compression_method;
-+	unsigned long aes_version;
-+	fcrypt_ctx aes_ctx;
- };
- 
- static inline int getshort(fz_context *ctx, fz_stream *file)
-@@ -105,6 +136,7 @@ static void read_zip_dir_imp(fz_context *ctx, fz_archive *zip, int start_offset)
- 	int offset, count;
- 	int namesize, metasize, commentsize;
- 	int i;
-+	int general;
- 
- 	fz_seek(ctx, file, start_offset, 0);
- 
-@@ -173,11 +205,17 @@ static void read_zip_dir_imp(fz_context *ctx, fz_archive *zip, int start_offset)
- 
- 		(void) getshort(ctx, file); /* version made by */
- 		(void) getshort(ctx, file); /* version to extract */
--		(void) getshort(ctx, file); /* general */
-+		general = getshort(ctx, file); /* general */
- 		(void) getshort(ctx, file); /* method */
- 		(void) getshort(ctx, file); /* last mod file time */
- 		(void) getshort(ctx, file); /* last mod file date */
- 		(void) getlong(ctx, file); /* crc-32 */
-+		if (general & ZIP_ENCRYPTED_FLAG) {
-+			zip->crypted = 1;
-+			zip->table[i].crypted = 1;
-+		} else {
-+			zip->table[i].crypted = 0;
-+		}
- 		zip->table[i].csize = getlong(ctx, file);
- 		zip->table[i].usize = getlong(ctx, file);
- 		namesize = getshort(ctx, file);
-@@ -263,6 +301,10 @@ static int read_zip_entry_header(fz_context *ctx, fz_archive *zip, struct zip_en
- {
- 	fz_stream *file = zip->file;
- 	int sig, general, method, namelength, extralength;
-+	int i, headerid, datasize, crc32, modtime, chk;
++#ifndef NOBUILTINFONT
+ 	RETURN(NotoEmoji_Regular_ttf);
++#else // NOBUILTINFONT
++	return get_font_file("noto/NotoEmoji-Regular.ttf");
++#endif
 +
-+	unsigned char source[12];
-+	unsigned char crcbyte;
- 
- 	fz_seek(ctx, file, ent->offset, 0);
- 
-@@ -272,19 +314,65 @@ static int read_zip_entry_header(fz_context *ctx, fz_archive *zip, struct zip_en
- 
- 	(void) getshort(ctx, file); /* version */
- 	general = getshort(ctx, file); /* general */
--	if (general & ZIP_ENCRYPTED_FLAG)
--		fz_throw(ctx, FZ_ERROR_GENERIC, "zip content is encrypted");
--
- 	method = getshort(ctx, file);
--	(void) getshort(ctx, file); /* file time */
-+	modtime = getshort(ctx, file); /* file time */
- 	(void) getshort(ctx, file); /* file date */
--	(void) getlong(ctx, file); /* crc-32 */
-+	crc32 = getlong(ctx, file); /* crc-32 */
- 	(void) getlong(ctx, file); /* csize */
- 	(void) getlong(ctx, file); /* usize */
- 	namelength = getshort(ctx, file);
- 	extralength = getshort(ctx, file);
- 
--	fz_seek(ctx, file, namelength + extralength, 1);
-+	fz_seek(ctx, file, namelength, 1);
-+	if (general & ZIP_ENCRYPTED_FLAG) {
-+		if (method == AES_METHOD) {
-+			while (extralength > 0) {
-+				headerid = getshort(ctx, file);
-+				datasize = getshort(ctx, file);
-+				if (headerid == 0x9901) {
-+					zip->aes_version = getshort(ctx, file);
-+					(void) getshort(ctx, file); /* "AE" */
-+					zip->aes_encryption_mode = fz_read_byte(ctx, file);
-+					zip->aes_compression_method = getshort(ctx, file);
-+				}
-+				extralength -= 2 + 2 + datasize;
-+			}
-+			if (zip->aes_encryption_mode) {
-+				unsigned char passverifyread[AES_PWVERIFYSIZE];
-+				unsigned char passverifycalc[AES_PWVERIFYSIZE];
-+				unsigned char saltvalue[AES_MAXSALTLENGTH];
-+				unsigned int saltlength;
-+				saltlength = SALT_LENGTH(zip->aes_encryption_mode);
-+				fz_read(ctx, file, saltvalue, saltlength);
-+				fz_read(ctx, file, passverifyread, AES_PWVERIFYSIZE);
-+				fcrypt_init(zip->aes_encryption_mode, zip->password, strlen(zip->password),
-+					saltvalue, passverifycalc, &zip->aes_ctx);
-+				for (i = 0; i < AES_PWVERIFYSIZE; i++) {
-+					if (passverifyread[i] != passverifycalc[i]) {
-+						return -1;
-+					}
-+				}
-+			}
-+		} else {
-+			fz_seek(ctx, file, extralength, 1);
-+			zip->pcrc_32_tab = (const z_crc_t*)get_crc_table();
-+			init_keys(zip->password, zip->keys, zip->pcrc_32_tab);
-+			fz_read(ctx, file, source, 12);
-+			for (i = 0; i < 12; i++) {
-+				crcbyte = zdecode(zip->keys, zip->pcrc_32_tab, source[i]);
-+			}
-+			if (general & 0x8) {
-+				chk = modtime;  // WTF? This is undocumented in the APPNOTE!
-+			} else {
-+				chk = crc32 >> 16;
-+			}
-+			if (chk >> 8 != crcbyte) {
-+				return -1;
-+			}
-+		}
-+	} else {
-+		fz_seek(ctx, file, extralength, 1);
-+	}
- 
- 	return method;
- }
-@@ -293,6 +381,9 @@ static fz_stream *open_zip_entry(fz_context *ctx, fz_archive *zip, struct zip_en
- {
- 	fz_stream *file = zip->file;
- 	int method = read_zip_entry_header(ctx, zip, ent);
-+	if (method == AES_METHOD) {
-+		method = zip->aes_compression_method;
-+	}
- 	if (method == 0)
- 		return fz_open_null(ctx, file, ent->usize, fz_tell(ctx, file));
- 	if (method == 8)
-@@ -306,10 +397,14 @@ static fz_buffer *read_zip_entry(fz_context *ctx, fz_archive *zip, struct zip_en
- 	fz_buffer *ubuf;
- 	unsigned char *cbuf;
- 	int method;
-+	int i;
- 	z_stream z;
- 	int code;
- 
- 	method = read_zip_entry_header(ctx, zip, ent);
-+	if (method == AES_METHOD) {
-+		method = zip->aes_compression_method;
-+	}
- 
- 	ubuf = fz_new_buffer(ctx, ent->usize + 1); /* +1 because many callers will add a terminating zero */
- 	ubuf->len = ent->usize;
-@@ -319,6 +414,14 @@ static fz_buffer *read_zip_entry(fz_context *ctx, fz_archive *zip, struct zip_en
- 		fz_try(ctx)
- 		{
- 			fz_read(ctx, file, ubuf->data, ent->usize);
-+			if (ent->crypted) {
-+				if (zip->aes_encryption_mode) {
-+					fcrypt_decrypt(ubuf->data, ent->usize, &zip->aes_ctx);
-+				} else {
-+					for(i = 0; i < ent->usize; ++i)
-+						ubuf->data[i] = zdecode(zip->keys,zip->pcrc_32_tab, ubuf->data[i]);
-+				}
-+			}
- 		}
- 		fz_catch(ctx)
- 		{
-@@ -335,6 +438,15 @@ static fz_buffer *read_zip_entry(fz_context *ctx, fz_archive *zip, struct zip_en
- 		{
- 			fz_read(ctx, file, cbuf, ent->csize);
- 
-+			if (ent->crypted) {
-+				if (zip->aes_encryption_mode) {
-+					fcrypt_decrypt(cbuf, ent->csize, &zip->aes_ctx);
-+				} else {
-+					for(i = 0; i < ent->csize; ++i) {
-+						cbuf[i] = zdecode(zip->keys, zip->pcrc_32_tab, cbuf[i]);
-+					}
-+				}
-+			}
- 			z.zalloc = (alloc_func) fz_malloc_array;
- 			z.zfree = (free_func) fz_free;
- 			z.opaque = ctx;
-@@ -377,6 +489,25 @@ static fz_buffer *read_zip_entry(fz_context *ctx, fz_archive *zip, struct zip_en
- }
- 
- int
-+fz_archive_needs_password(fz_context *ctx, fz_archive *zip)
-+{
-+	return zip->crypted;
-+}
-+
-+int
-+fz_archive_authenticate_password(fz_context *ctx, fz_archive *zip, const char *password)
-+{
-+	int i;
-+	fz_strlcpy(zip->password, password, sizeof zip->password);
-+	for (i = 0; i < zip->count; ++i) {
-+		if (zip->table[i].crypted) {
-+			return read_zip_entry_header(ctx, zip, &zip->table[i]) != -1;
-+		}
-+	}
-+	return 1;
-+}
-+
-+int
- fz_has_archive_entry(fz_context *ctx, fz_archive *zip, const char *name)
- {
- 	if (zip->directory)
-@@ -507,6 +638,9 @@ fz_open_archive(fz_context *ctx, const char *filename)
- 
- 	fz_try(ctx)
- 		zip = fz_open_archive_with_stream(ctx, file);
-+		zip->aes_compression_method = 0;
-+		zip->aes_encryption_mode = 0;
-+		zip->aes_version = 0;
- 	fz_always(ctx)
- 		fz_drop_stream(ctx, file);
- 	fz_catch(ctx)
-diff --git a/source/cbz/mucbz.c b/source/cbz/mucbz.c
-index 14be833..197af14 100644
---- a/source/cbz/mucbz.c
-+++ b/source/cbz/mucbz.c
-@@ -186,6 +186,18 @@ cbz_load_page(fz_context *ctx, cbz_document *doc, int number)
- 	return page;
- }
- 
-+int
-+cbz_needs_password(fz_context *ctx, cbz_document *doc)
-+{
-+	return fz_archive_needs_password(ctx, doc->zip);
-+}
-+
-+int
-+cbz_authenticate_password(fz_context *ctx, cbz_document *doc, const char *pwd_utf8)
-+{
-+	return fz_archive_authenticate_password(ctx, doc->zip, pwd_utf8);
-+}
-+
- static int
- cbz_lookup_metadata(fz_context *ctx, cbz_document *doc, const char *key, char *buf, int size)
- {
-@@ -200,6 +212,8 @@ cbz_open_document_with_stream(fz_context *ctx, fz_stream *file)
- 	cbz_document *doc = fz_new_document(ctx, sizeof *doc);
- 
- 	doc->super.close = (fz_document_close_fn *)cbz_close_document;
-+	doc->super.needs_password = (fz_document_needs_password_fn *)cbz_needs_password;
-+	doc->super.authenticate_password = (fz_document_authenticate_password_fn *)cbz_authenticate_password;
- 	doc->super.count_pages = (fz_document_count_pages_fn *)cbz_count_pages;
- 	doc->super.load_page = (fz_document_load_page_fn *)cbz_load_page;
- 	doc->super.lookup_metadata = (fz_document_lookup_metadata_fn *)cbz_lookup_metadata;
+ #else
+ 	return *size = 0, NULL;
+ #endif
+diff --git a/source/html/html-font.c b/source/html/html-font.c
+index 389ddb3..0e9395c 100644
+--- a/source/html/html-font.c
++++ b/source/html/html-font.c
+@@ -15,7 +15,12 @@ fz_load_html_default_font(fz_context *ctx, fz_html_font_set *set, const char *fa
+ 		data = fz_lookup_builtin_font(ctx, real_family, is_bold, is_italic, &size);
+ 		if (!data)
+ 			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot load html font: %s", real_family);
++#ifndef NOBUILTINFONT
+ 		set->fonts[idx] = fz_new_font_from_memory(ctx, NULL, data, size, 0, 1);
++#else
++		set->fonts[idx] = fz_new_font_from_file(ctx, NULL, data, 0, 1);
++		free((char*)data);
++#endif
+ 		set->fonts[idx]->is_serif = !is_sans;
+ 	}
+ 	return set->fonts[idx];
+@@ -56,7 +61,12 @@ fz_load_html_font(fz_context *ctx, fz_html_font_set *set, const char *family, in
+ 	data = fz_lookup_builtin_font(ctx, family, is_bold, is_italic, &size);
+ 	if (data)
+ 	{
++#ifndef NOBUILTINFONT
+ 		fz_font *font = fz_new_font_from_memory(ctx, NULL, data, size, 0, 0);
++#else
++		fz_font *font = fz_new_font_from_file(ctx, NULL, data, 0, 0);
++		free((char*)data);
++#endif
+ 		if (is_bold && !font->is_bold)
+ 			font->fake_bold = 1;
+ 		if (is_italic && !font->is_italic)
+diff --git a/source/pdf/pdf-font.c b/source/pdf/pdf-font.c
+index c3513cb..1811754 100644
+--- a/source/pdf/pdf-font.c
++++ b/source/pdf/pdf-font.c
+@@ -241,7 +241,12 @@ pdf_load_builtin_font(fz_context *ctx, pdf_font_desc *fontdesc, char *fontname,
+ 		if (!data)
+ 			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot find builtin font: '%s'", fontname);
+
++#ifndef NOBUILTINFONT
+ 		fontdesc->font = fz_new_font_from_memory(ctx, fontname, data, len, 0, 1);
++#else
++		fontdesc->font = fz_new_font_from_file(ctx, fontname, data, 0, 1);
++		free((char*)data);
++#endif
+ 		fontdesc->font->is_serif = !!strstr(clean_name, "Times");
+ 	}
+
+@@ -266,7 +271,12 @@ pdf_load_substitute_font(fz_context *ctx, pdf_font_desc *fontdesc, char *fontnam
+ 		if (!data)
+ 			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot find substitute font");
+
++#ifndef NOBUILTINFONT
+ 		fontdesc->font = fz_new_font_from_memory(ctx, fontname, data, len, 0, 1);
++#else
++		fontdesc->font = fz_new_font_from_file(ctx, fontname, data, 0, 1);
++		free((char*)data);
++#endif
+ 		fontdesc->font->fake_bold = bold && !fontdesc->font->is_bold;
+ 		fontdesc->font->fake_italic = italic && !fontdesc->font->is_italic;
+
+@@ -295,7 +305,12 @@ pdf_load_substitute_cjk_font(fz_context *ctx, pdf_font_desc *fontdesc, char *fon
+ 			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot find builtin CJK font");
+
+ 		/* A glyph bbox cache is too big for CJK fonts. */
++#ifndef NOBUILTINFONT
+ 		fontdesc->font = fz_new_font_from_memory(ctx, fontname, data, len, index, 0);
++#else
++		fontdesc->font = fz_new_font_from_file(ctx, fontname, data, 0, 1);
++		free((char*)data);
++#endif
+ 	}
+
+ 	fontdesc->font->ft_substitute = 1;
+--
+1.9.1
+

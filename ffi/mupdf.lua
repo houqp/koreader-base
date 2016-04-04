@@ -45,7 +45,8 @@ local function context()
     local ctx = M.fz_new_context_imp(
         mupdf.debug_memory and W.mupdf_get_my_alloc_context() or nil,
         nil,
-        mupdf.cache_size, FZ_VERSION)
+        mupdf.cache_size,
+        FZ_VERSION)
 
     if ctx == nil then
         error("cannot create fz_context for MuPDF")
@@ -58,9 +59,10 @@ end
 -- a wrapper for mupdf exception error messages
 local function merror(message)
     if context() ~= nil then
-        error(string.format("%s: %s (%d)", message,
-            ffi.string(W.mupdf_error_message(context())),
-            W.mupdf_error_code(context())))
+        error(string.format("%s: %s (%d)",
+                            message,
+                            ffi.string(W.mupdf_error_message(context())),
+                            W.mupdf_error_code(context())))
     else
         error(message)
     end
@@ -188,7 +190,7 @@ function document_mt.__index:openPage(number)
         doc = self,
     }
     if mupdf_page.page == nil then
-		merror("cannot open page #" .. number)
+        merror("cannot open page #" .. number)
     end
     setmetatable(mupdf_page, page_mt)
     return mupdf_page
@@ -243,20 +245,22 @@ end
 write the document to a new file
 --]]
 function document_mt.__index:writeDocument(filename)
+    local idoc = W.pdf_specifics(context(), self.doc)
+    if idoc == nil then error("Failed to get pdf document from fz_document") end
     -- the API takes a char*, not a const char*,
     -- so we claim memory - and never free it. Too bad.
     -- TODO: free on closing document?
     local filename_str = ffi.C.malloc(#filename + 1)
     if filename == nil then error("could not allocate memory for filename") end
     ffi.copy(filename_str, filename)
-	local opts = ffi.new("fz_write_options[1]")
-	opts[0].do_incremental = (filename == self.filename ) and 1 or 0
-	opts[0].do_ascii = 0
-	opts[0].do_expand = 0
-	opts[0].do_garbage = 0
-	opts[0].do_linear = 0
-	opts[0].continue_on_error = 1
-	local ok = W.mupdf_write_document(context(), self.doc, filename_str, opts)
+    local opts = ffi.new("pdf_write_options[1]")
+    opts[0].do_incremental = (filename == self.filename ) and 1 or 0
+    opts[0].do_ascii = 0
+    opts[0].do_expand = 0
+    opts[0].do_garbage = 0
+    opts[0].do_linear = 0
+    opts[0].continue_on_error = 1
+    local ok = W.mupdf_write_document(context(), idoc, filename_str, opts)
     if ok == nil then merror("could not write document") end
 end
 
@@ -386,24 +390,24 @@ for space characters.
 will return an empty table if we have no text
 --]]
 function page_mt.__index:getPageText()
-    -- first, we run the page through a special device, the text_device
-    local text_page = W.mupdf_new_text_page(context())
-    if text_page == nil then merror("cannot alloc text_page") end
-    local text_sheet = W.mupdf_new_text_sheet(context())
-    if text_sheet == nil then
-        M.fz_drop_text_page(context(), text_page)
-        merror("cannot alloc text_sheet")
+    -- first, we run the page through a special device, the stext_device
+    local stext_page = W.mupdf_new_stext_page(context())
+    if stext_page == nil then merror("cannot alloc stext_page") end
+    local stext_sheet = W.mupdf_new_stext_sheet(context())
+    if stext_sheet == nil then
+        M.fz_drop_stext_page(context(), stext_page)
+        merror("cannot alloc stext_sheet")
     end
-    local tdev = W.mupdf_new_text_device(context(), text_sheet, text_page)
+    local tdev = W.mupdf_new_stext_device(context(), stext_sheet, stext_page)
     if tdev == nil then
-        M.fz_drop_text_page(context(), text_page)
-        M.fz_drop_text_sheet(context(), text_sheet)
+        M.fz_drop_stext_page(context(), stext_page)
+        M.fz_drop_stext_sheet(context(), stext_sheet)
         merror("cannot alloc text device")
     end
 
     if W.mupdf_run_page(context(), self.page, tdev, M.fz_identity, nil) == nil then
-        M.fz_drop_text_page(context(), text_page)
-        M.fz_drop_text_sheet(context(), text_sheet)
+        M.fz_drop_stext_page(context(), stext_page)
+        M.fz_drop_stext_sheet(context(), stext_sheet)
         M.fz_drop_device(context(), tdev)
         merror("cannot run page through text device")
     end
@@ -413,9 +417,9 @@ function page_mt.__index:getPageText()
     local lines = {}
     local char_bbox = ffi.new("fz_rect[1]")
 
-    for block_num = 0, text_page.len - 1 do
-        if text_page.blocks[block_num].type == M.FZ_PAGE_BLOCK_TEXT then
-            local block = text_page.blocks[block_num].u.text
+    for block_num = 0, stext_page.len - 1 do
+        if stext_page.blocks[block_num].type == M.FZ_PAGE_BLOCK_TEXT then
+            local block = stext_page.blocks[block_num].u.text
 
             -- a block contains lines, which is our primary return datum
             for line_num = 0, block.len - 1 do
@@ -442,19 +446,19 @@ function page_mt.__index:getPageText()
                                 -- ignore and end word
                                 break
                             end
-						    textlen = textlen + M.fz_runetochar(textbuf + textlen, span.text[i].c)
-						    M.fz_union_rect(word_bbox, M.fz_text_char_bbox(context(), char_bbox, span, i))
-						    M.fz_union_rect(line_bbox, char_bbox)
-						    if span.text[i].c >= 0x4e00 and span.text[i].c <= 0x9FFF or -- CJK Unified Ideographs
-							    span.text[i].c >= 0x2000 and span.text[i].c <= 0x206F or -- General Punctuation
-							    span.text[i].c >= 0x3000 and span.text[i].c <= 0x303F or -- CJK Symbols and Punctuation
-							    span.text[i].c >= 0x3400 and span.text[i].c <= 0x4DBF or -- CJK Unified Ideographs Extension A
-							    span.text[i].c >= 0xF900 and span.text[i].c <= 0xFAFF or -- CJK Compatibility Ideographs
-							    span.text[i].c >= 0xFF01 and span.text[i].c <= 0xFFEE or -- Halfwidth and Fullwidth Forms
-							    span.text[i].c >= 0x20000 and span.text[i].c <= 0x2A6DF  -- CJK Unified Ideographs Extension B
-						    then
+                            textlen = textlen + M.fz_runetochar(textbuf + textlen, span.text[i].c)
+                            M.fz_union_rect(word_bbox, M.fz_stext_char_bbox(context(), char_bbox, span, i))
+                            M.fz_union_rect(line_bbox, char_bbox)
+                            if span.text[i].c >= 0x4e00 and span.text[i].c <= 0x9FFF or -- CJK Unified Ideographs
+                                span.text[i].c >= 0x2000 and span.text[i].c <= 0x206F or -- General Punctuation
+                                span.text[i].c >= 0x3000 and span.text[i].c <= 0x303F or -- CJK Symbols and Punctuation
+                                span.text[i].c >= 0x3400 and span.text[i].c <= 0x4DBF or -- CJK Unified Ideographs Extension A
+                                span.text[i].c >= 0xF900 and span.text[i].c <= 0xFAFF or -- CJK Compatibility Ideographs
+                                span.text[i].c >= 0xFF01 and span.text[i].c <= 0xFFEE or -- Halfwidth and Fullwidth Forms
+                                span.text[i].c >= 0x20000 and span.text[i].c <= 0x2A6DF  -- CJK Unified Ideographs Extension B
+                            then
                                 -- end word
-							    break
+                                break
                             end
                             i = i + 1
                         end
@@ -478,8 +482,8 @@ function page_mt.__index:getPageText()
     end
 
     M.fz_drop_device(context(), tdev)
-    M.fz_drop_text_sheet(context(), text_sheet)
-    M.fz_drop_text_page(context(), text_page)
+    M.fz_drop_stext_sheet(context(), stext_sheet)
+    M.fz_drop_stext_page(context(), stext_page)
 
     return lines
 end
@@ -629,8 +633,11 @@ function mupdf.renderImage(data, size, width, height)
                     ffi.cast("unsigned char*", data), size)
     if image == nil then merror("could not load image data") end
     M.fz_keep_image(context(), image)
-    local pixmap = W.mupdf_new_pixmap_from_image(context(),
-                    image, width or -1, height or -1)
+    local pixmap = W.mupdf_get_pixmap_from_image(
+                    context(),
+                    image,
+                    width or -1,
+                    height or -1)
     if pixmap == nil then
         M.fz_drop_image(context(), image)
         merror("could not create pixmap from image")

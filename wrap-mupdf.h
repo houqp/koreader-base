@@ -69,13 +69,13 @@ MUPDF_WRAP(mupdf_load_outline, fz_outline*, NULL,
 MUPDF_WRAP(mupdf_load_page, fz_page*, NULL,
     ret = fz_load_page(ctx, doc, pageno),
     fz_document *doc, int pageno)
-MUPDF_WRAP(mupdf_new_text_sheet, fz_text_sheet*, NULL,
-    ret = fz_new_text_sheet(ctx))
-MUPDF_WRAP(mupdf_new_text_page, fz_text_page*, NULL,
-    ret = fz_new_text_page(ctx))
-MUPDF_WRAP(mupdf_new_text_device, fz_device*, NULL,
-    ret = fz_new_text_device(ctx, sheet, page),
-    fz_text_sheet *sheet, fz_text_page *page)
+MUPDF_WRAP(mupdf_new_stext_sheet, fz_stext_sheet*, NULL,
+    ret = fz_new_stext_sheet(ctx))
+MUPDF_WRAP(mupdf_new_stext_page, fz_stext_page*, NULL,
+    ret = fz_new_stext_page(ctx))
+MUPDF_WRAP(mupdf_new_stext_device, fz_device*, NULL,
+    ret = fz_new_stext_device(ctx, sheet, page),
+    fz_stext_sheet *sheet, fz_stext_page *page)
 MUPDF_WRAP(mupdf_new_bbox_device, fz_device*, NULL,
     ret = fz_new_bbox_device(ctx, rectp),
     fz_rect *rectp)
@@ -86,8 +86,8 @@ MUPDF_WRAP(mupdf_run_page, void*, NULL,
     { fz_run_page(ctx, page, dev, transform, cookie); ret = (void*) -1; },
     fz_page *page, fz_device *dev, const fz_matrix *transform, fz_cookie *cookie)
 MUPDF_WRAP(mupdf_write_document, void*, NULL,
-    { fz_write_document(ctx, doc, filename, opts); ret = (void*) -1; },
-    fz_document *doc, char* filename, fz_write_options *opts)
+    { pdf_write_document(ctx, doc, filename, opts); ret = (void*) -1; },
+    pdf_document *doc, char* filename, pdf_write_options *opts)
 MUPDF_WRAP(mupdf_new_pixmap, fz_pixmap*, NULL,
     ret = fz_new_pixmap(ctx, cs, w, h),
     fz_colorspace *cs, int w, int h)
@@ -112,8 +112,8 @@ MUPDF_WRAP(mupdf_pdf_set_markup_annot_quadpoints, void*, NULL,
 MUPDF_WRAP(mupdf_pdf_set_markup_appearance, void*, NULL,
     { pdf_set_markup_appearance(ctx, doc, annot, color, alpha, line_thickness, line_height); ret = (void*) -1; },
     pdf_document *doc, pdf_annot *annot, float color[3], float alpha, float line_thickness, float line_height)
-MUPDF_WRAP(mupdf_new_pixmap_from_image, fz_pixmap*, NULL,
-    ret = fz_new_pixmap_from_image(ctx, image, w, h),
+MUPDF_WRAP(mupdf_get_pixmap_from_image, fz_pixmap*, NULL,
+    ret = fz_get_pixmap_from_image(ctx, image, w, h),
     fz_image *image, int w, int h)
 MUPDF_WRAP(mupdf_new_image_from_data, fz_image*, NULL,
     ret = fz_new_image_from_data(ctx, data, len),

@@ -95,7 +95,7 @@ $(OUTPUT_DIR)/libs/libkoreader-cre.so: cre.cpp \
 		-DLDOM_USE_OWN_MEM_MAN=$(if $(WIN32),0,1) \
 		$(if $(WIN32),-DQT_GL=1) -static-libstdc++ -o $@ $^
 
-$(OUTPUT_DIR)/libs/libwrap-mupdf.so: wrap-mupdf.c \
+$(OUTPUT_DIR)/libs/libwrap-mupdf.so: wrap-mupdf.c wrap-mupdf.h \
 			$(MUPDF_LIB)
 	$(CC) -I$(MUPDF_DIR)/include $(DYNLIB_CFLAGS) -o $@ $^
 
