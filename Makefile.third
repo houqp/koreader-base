@@ -172,7 +172,9 @@ $(LUAJIT) $(LUAJIT_LIB) $(LUAJIT_JIT): $(THIRDPARTY_DIR)/luajit/CMakeLists.txt
 ifdef USE_LUAJIT_LIB
 	cp -fL $(LUAJIT_DIR)/src/$(notdir $(LUAJIT_LIB)) $(LUAJIT_LIB)
 endif
+ifdef SKIP_LUAJIT_BIN
 	cp -fL $(LUAJIT_DIR)/src/$(notdir $(LUAJIT)) $(LUAJIT)
+endif
 	-rm -rf $(LUAJIT_JIT)
 	$(RCP) -fL $(LUAJIT_DIR)/src/jit $(OUTPUT_DIR)
 

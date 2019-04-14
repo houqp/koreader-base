@@ -7,6 +7,7 @@ source "${CI_DIR}/common.sh"
 
 travis_retry make fetchthirdparty
 
+test -d "${HOME}/.ccache" || mkdir "${HOME}/.ccache"
 if [ "$TARGET" = "android" ] && [ -n "${DOCKER_IMG}" ]; then
     sudo chmod -R 777 "${HOME}/.ccache"
     docker run -t \
