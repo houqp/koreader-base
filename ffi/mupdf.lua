@@ -30,6 +30,7 @@ local mupdf = {
     debug_memory = false,
     cache_size = 8*1024*1024,
     color = false,
+    bgr = false,
 }
 -- this cannot get adapted by the cdecl file because it is a
 -- string constant. Must match the actual mupdf API:

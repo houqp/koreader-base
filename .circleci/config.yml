@@ -1,0 +1,88 @@
+version: 2
+
+workflows:
+  version: 2
+  lint_build_test:
+    jobs:
+      - lint
+      - emu_gcc_ninja:
+          requires:
+            - lint
+      - emu_gcc_ninja_debug:
+          requires:
+            - lint
+      - emu_gcc_make:
+          requires:
+            - lint
+      - emu_clang_ninja:
+          requires:
+            - lint
+
+
+jobs:
+  lint:
+    image: frenzie/kobase:0.1.2
+    steps:
+      - checkout
+      - run:
+        name: install
+        command: |
+          source .ci/lint_install.sh
+      - run:
+        name: lint
+        command: |
+          source .ci/lint_script.sh
+
+  emu: &EMU_TPL
+    docker:
+      - image: frenzie/kobase:0.1.2
+    environment: &EMU_ENV_LST
+      # gitlab ci only caches files within build dir
+      CCACHE_DIR: $CI_PROJECT_DIR/ccache
+      EMULATE_READER: "1"
+      CC: "gcc"
+    steps:
+      - checkout
+      - run:
+        name: install
+        command: |
+          source .ci/before_install.sh
+          source .ci/emulator_install.sh
+
+      - restore_cache:
+          keys: emu_gcc
+
+      - run:
+        name: build
+        command: |
+          source .ci/build_script.sh
+      - run:
+        name: test
+        command: |
+          source .ci/test_script.sh
+
+      - save_cache:
+          key: emu_{{ .Environment.CC }}
+          paths:
+            - $CI_PROJECT_DIR/ccache
+
+  emu_gcc_ninja:
+    <<: *EMU_TPL
+
+  emu_gcc_ninja_debug:
+    <<: *EMU_TPL
+    environment:
+      <<: *EMU_ENV_LST
+      KODEBUG: "1"
+
+  emu_gcc_make:
+    <<: *EMU_TPL
+    environment:
+      <<: *EMU_ENV_LST
+      USE_MAKE: "1"
+
+  emu_clang_ninja:
+    <<: *EMU_TPL
+    environment:
+      <<: *EMU_ENV_LST
+      CC: "clang"
